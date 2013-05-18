@@ -1,6 +1,7 @@
 package org.usc.wechat.mp.web.servlet;
 
 import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -40,20 +41,16 @@ public class AccessServlet extends HttpServlet {
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         try {
             Signature signature = new Signature();
+            boolean hasRights = checkSignature(signature, request);
 
-            BeanUtils.populate(signature, request.getParameterMap());
-            signature.setToken(TOKEN);
-
-            String sign = DigestUtils.sha1Hex(buildSignatureText(signature));
-            if (!sign.equalsIgnoreCase(signature.getSignature())) {
-                log.info("sign-not-match:{},{}", sign, signature);
-                return;
+            if (hasRights) {
+                log.info("signature-success:{}", signature);
+                WebUtil.outputString(response, signature.getEchostr());
+            } else {
+                log.info("signature-not-match:{}", signature);
             }
-
-            log.info("signature-success:{}", signature);
-            WebUtil.outputString(response, signature.getEchostr());
         } catch (Exception e) {
-            log.error("sign-error", e);
+            log.error("signature-error", e);
         }
     }
 
@@ -61,23 +58,17 @@ public class AccessServlet extends HttpServlet {
     protected void doPost(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         try {
             Signature signature = new Signature();
-
-            BeanUtils.populate(signature, request.getParameterMap());
-            signature.setToken(TOKEN);
-
-            String sign = DigestUtils.sha1Hex(buildSignatureText(signature));
-            if (!sign.equalsIgnoreCase(signature.getSignature())) {
-                log.info("sign-not-match:{},{}", sign, signature);
+            if (!checkSignature(signature, request)) {
+                log.info("signature-not-match:{}", signature);
                 return;
             }
 
             String sessionid = request.getSession().getId();
-
             String message = WebUtil.getPostString(request.getInputStream());
             log.info("push-xml:{},{}", sessionid, message);
 
             String messageType = getMsgType(message);
-            PushEnumFactory pushEnum = EnumUtils.getEnum(PushEnumFactory.class, messageType);
+            PushEnumFactory pushEnum = EnumUtils.getEnum(PushEnumFactory.class, StringUtils.upperCase(messageType));
             Validate.notNull(pushEnum, "don't-support-%s-type-message", messageType);
 
             Push push = pushEnum.convert(message);
@@ -85,14 +76,25 @@ public class AccessServlet extends HttpServlet {
 
             Reply reply = pushEnum.parse(push);
             String replyXml = XmlUtil.marshal(reply);
-            Validate.notEmpty(replyXml, "no-reply:%s,%s", sessionid, reply);
 
-            log.info("reply-xml:{},{}", sessionid, replyXml);
-            log.info("reply-obj:{},{}", sessionid, reply);
-            WebUtil.outputString(response, replyXml);
+            if (StringUtils.isNotEmpty(replyXml)) {
+                log.info("reply-xml:{},{}", sessionid, replyXml);
+                log.info("reply-obj:{},{}", sessionid, reply);
+                WebUtil.outputString(response, replyXml);
+            } else {
+                log.info("no-reply:{},{}", sessionid, reply);
+            }
         } catch (Exception e) {
             log.error("push-reply-error", e);
         }
+    }
+
+    private boolean checkSignature(Signature signature, HttpServletRequest request) throws IllegalAccessException, InvocationTargetException {
+        BeanUtils.populate(signature, request.getParameterMap());
+        signature.setToken(TOKEN);
+
+        String sign = DigestUtils.sha1Hex(buildSignatureText(signature));
+        return sign.equalsIgnoreCase(signature.getSignature());
     }
 
     private String buildSignatureText(Signature signature) {
