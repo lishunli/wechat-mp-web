@@ -22,8 +22,8 @@ import org.slf4j.LoggerFactory;
 import org.usc.wechat.mp.sdk.factory.PushEnumFactory;
 import org.usc.wechat.mp.sdk.util.XmlUtil;
 import org.usc.wechat.mp.sdk.vo.Signature;
+import org.usc.wechat.mp.sdk.vo.message.reply.Reply;
 import org.usc.wechat.mp.sdk.vo.push.Push;
-import org.usc.wechat.mp.sdk.vo.reply.Reply;
 import org.usc.wechat.mp.web.util.WebUtil;
 
 /**
